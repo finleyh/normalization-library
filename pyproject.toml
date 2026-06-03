@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fyc-normalize"
+version = "0.1.0"
+description = "Lightweight value normalizers (emails, phones, US TINs, usernames) usable in any DataFrame or plain Python."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Finley" }]
+keywords = ["normalization", "data-cleaning", "etl", "emails", "phone-numbers"]
+
+# PyYAML is the only core dependency — it loads the bundled email provider
+# profiles. Everything else (DataFrames, phone parsing) is an optional extra.
+dependencies = ["PyYAML>=6.0"]
+
+[project.optional-dependencies]
+phone = ["phonenumbers>=8.13"]   # real E.164 parsing for the ANI normalizer
+domain = ["idna>=3.0"]           # full IDNA2008 / UTS-46 for the domain normalizer
+polars = ["polars>=0.20"]        # optional DataFrame column helpers
+pandas = ["pandas>=2.0"]         # optional DataFrame column helpers
+
+# Dev-only tooling (PEP 735). `uv sync` installs this group by default; it is
+# not part of the published package. Includes phonenumbers + idna so the full
+# test suite (phone and domain tests) runs.
+[dependency-groups]
+dev = ["pytest>=8.0", "phonenumbers>=8.13", "idna>=3.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fyc_normalize"]
+
+[tool.uv]
+# Always install this project (editable) into the environment on `uv sync`.
+package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
