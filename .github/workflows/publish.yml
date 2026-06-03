@@ -1,11 +1,13 @@
 name: Publish to PyPI
 
-# Publishes when you cut a GitHub Release (which also creates the tag).
-# Uses PyPI Trusted Publishing (OIDC) — no API tokens or stored secrets.
+# Publishes when a commit lands on `main` — i.e. when a PR (e.g. develop -> main)
+# is merged. Uses PyPI Trusted Publishing (OIDC) — no API tokens or secrets.
+# `skip-existing` means a merge that did NOT bump the version is a harmless no-op:
+# the build runs but the already-published version is skipped instead of erroring.
 on:
-  release:
-    types: [published]
-  workflow_dispatch: {}   # allow manual runs (e.g. to publish to TestPyPI)
+  push:
+    branches: [main]
+  workflow_dispatch: {}   # manual run = build only (dry run), does not publish
 
 jobs:
   build:
@@ -33,8 +35,8 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
-    # Only publish on an actual release, not on manual dispatch.
-    if: github.event_name == 'release'
+    # Only publish on a real push to main (a merged PR), not on manual dispatch.
+    if: github.event_name == 'push'
     environment:
       name: pypi
       url: https://pypi.org/p/fyc-normalize
@@ -48,3 +50,6 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No-op if this version is already on PyPI (merge without a version bump).
+          skip-existing: true
