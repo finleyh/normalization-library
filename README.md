@@ -211,7 +211,8 @@ new version only goes out when the version number changes.
 
 **To ship a new version** (work on `develop`, release via PR):
 
-1. Bump `version` in `pyproject.toml` (and `__version__` in `__init__.py`).
+1. Bump `version` in `pyproject.toml` (the single source of truth —
+   `fyc_normalize.__version__` reads it from the installed package metadata).
 2. Move the `[Unreleased]` notes into a new version section in `CHANGELOG.md`.
 3. Open a PR from `develop` to `main`; CI runs the test matrix on it.
 4. Merge the PR. `publish.yml` runs on the resulting push to `main` and uploads

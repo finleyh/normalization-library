@@ -21,6 +21,8 @@ Optional DataFrame column helpers live in ``fyc_normalize.frames``.
 The transformation classes/singletons are also exported for advanced use.
 """
 
+from importlib.metadata import PackageNotFoundError, version
+
 from .anis import AniNormalizer, normalize_ani
 from .domains import DomainNormalizer, normalize_domain
 from .emails import EmailNormalizer, normalize_email
@@ -45,4 +47,9 @@ __all__ = [
     "UsernameNormalizer",
 ]
 
-__version__ = "0.1.0"
+# Single source of truth for the version is pyproject.toml; read it from the
+# installed package metadata so there's only ever one number to bump.
+try:
+    __version__ = version("fyc-normalize")
+except PackageNotFoundError:  # running from a source tree that isn't installed
+    __version__ = "0.0.0+unknown"
