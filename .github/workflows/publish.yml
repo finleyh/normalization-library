@@ -1,11 +1,13 @@
 name: Publish to PyPI
 
-# Publishes when you cut a GitHub Release (which also creates the tag).
-# Uses PyPI Trusted Publishing (OIDC) — no API tokens or stored secrets.
+# Runs on every merge to `main` (e.g. a develop -> main PR). It builds and
+# uploads to PyPI (a no-op via skip-existing if the version is unchanged), and
+# when the version IS new it also creates the matching git tag + GitHub Release
+# with notes from CHANGELOG.md. Uses PyPI Trusted Publishing (OIDC) — no tokens.
 on:
-  release:
-    types: [published]
-  workflow_dispatch: {}   # allow manual runs (e.g. to publish to TestPyPI)
+  push:
+    branches: [main]
+  workflow_dispatch: {}   # manual run = build only (dry run), does not publish
 
 jobs:
   build:
@@ -33,8 +35,8 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
-    # Only publish on an actual release, not on manual dispatch.
-    if: github.event_name == 'release'
+    # Only publish on a real push to main (a merged PR), not on manual dispatch.
+    if: github.event_name == 'push'
     environment:
       name: pypi
       url: https://pypi.org/p/fyc-normalize
@@ -48,3 +50,59 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # No-op if this version is already on PyPI (merge without a version bump).
+          skip-existing: true
+
+  github-release:
+    name: Tag + GitHub Release
+    needs: publish
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the tag and the GitHub Release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need full history + existing tags
+
+      - name: Read version from pyproject.toml
+        id: ver
+        run: |
+          version="$(grep -m1 '^version = ' pyproject.toml | sed -E 's/.*"(.*)".*/\1/')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Project version: $version"
+
+      - name: Does the tag already exist?
+        id: tag
+        run: |
+          if git rev-parse "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Tag v${{ steps.ver.outputs.version }} exists — version unchanged, skipping release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract release notes from CHANGELOG.md
+        if: steps.tag.outputs.exists == 'false'
+        run: |
+          version="${{ steps.ver.outputs.version }}"
+          awk -v ver="$version" '
+            $0 ~ ("^## \\[" ver "\\]") {flag=1; next}
+            /^## \[/ {flag=0}
+            /^\[.*\]: / {flag=0}
+            flag {print}
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then echo "Release v$version" > notes.md; fi
+          echo "----- notes.md -----"; cat notes.md
+
+      - name: Create tag + GitHub Release
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ steps.ver.outputs.version }}"
+          gh release create "v$version" \
+            --title "v$version" \
+            --notes-file notes.md \
+            --target "${{ github.sha }}"

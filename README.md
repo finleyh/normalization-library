@@ -188,11 +188,27 @@ GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Releasing
 
-Publishing is fully automated through GitHub Actions using **PyPI Trusted
-Publishing** (OIDC) — no API tokens or stored secrets. The package is built on
-GitHub and uploaded to PyPI when you publish a GitHub Release.
+Publishing is automated through GitHub Actions using **PyPI Trusted Publishing**
+(OIDC) — no API tokens or stored secrets.
 
-**One-time setup** (do this before the first release):
+Two separate things to keep straight:
+
+- **The publish workflow runs on *every* merge to `main`** (i.e. any `develop` →
+  `main` PR). It builds the sdist + wheel, runs `twine check`, and calls the
+  upload step every time.
+- **A new version is only *released* when you bump `version` in
+  `pyproject.toml`.** The upload uses `skip-existing`, so if the version already
+  exists on PyPI (you merged without changing it), the upload is skipped and
+  nothing else happens — the job still succeeds. If the version is new, that
+  version is uploaded to PyPI **and** the workflow automatically creates the
+  matching `v<version>` git tag and a GitHub Release, with notes pulled from the
+  matching section of `CHANGELOG.md`.
+
+In short: merging the PR is what *runs* the job; bumping the version number is
+what makes an actual release (PyPI + tag + GitHub Release) go out. You don't
+create tags or releases by hand — the workflow does it for you.
+
+**One-time setup** (before the first publish):
 
 1. On PyPI, go to your account → *Publishing* → *Add a pending publisher*, and register:
    - PyPI Project Name: `fyc-normalize`
@@ -200,16 +216,27 @@ GitHub and uploaded to PyPI when you publish a GitHub Release.
    - Workflow name: `publish.yml`
    - Environment name: `pypi`
 2. In the GitHub repo, create an environment named `pypi`
-   (*Settings → Environments → New environment*). Optionally add protection rules
-   (e.g. required reviewers) so releases need approval.
+   (*Settings → Environments → New environment*). Optionally add a required
+   reviewer so each publish needs approval.
+3. Protect `main` (*Settings → Branches*) so changes land only via pull request.
+4. Ensure Actions can create releases: *Settings → Actions → General → Workflow
+   permissions* should allow read **and** write (the workflow also requests
+   `contents: write` explicitly for the release job).
 
-**Each release:**
+**To ship a new version** (work on `develop`, release via PR):
 
-1. Bump `version` in `pyproject.toml` (and `__version__` in `__init__.py`).
+1. **Bump `version` in `pyproject.toml`.** This is the one step that makes a new
+   release happen — if you skip it, merging still runs the workflow but publishes
+   nothing new. (`pyproject.toml` is the single source of truth;
+   `fyc_normalize.__version__` reads it from the installed package metadata.)
 2. Move the `[Unreleased]` notes into a new version section in `CHANGELOG.md`.
-3. Commit, then cut a GitHub Release with a tag like `v0.1.0`.
-4. The `publish.yml` workflow builds the sdist + wheel, runs `twine check`, and
-   uploads to PyPI automatically.
+3. Open a PR from `develop` to `main`; CI runs the test matrix on it.
+4. Merge the PR. The push to `main` runs `publish.yml`, which uploads the new
+   version to PyPI and creates the `v<version>` tag + GitHub Release automatically.
+
+Merges that don't touch the version (docs, refactors, etc.) are fine — the
+workflow runs, skips the upload, and skips the release because the tag already
+exists. No manual tagging needed either way.
 
 To dry-run the build without publishing, trigger the workflow manually
 (*Actions → Publish to PyPI → Run workflow*); the `publish` job is skipped on
