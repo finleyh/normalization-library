@@ -189,13 +189,24 @@ GitHub Actions (`.github/workflows/ci.yml`).
 ## Releasing
 
 Publishing is automated through GitHub Actions using **PyPI Trusted Publishing**
-(OIDC) — no API tokens or stored secrets. **A merge to `main` publishes.** When a
-pull request (e.g. `develop` → `main`) is merged, `publish.yml` builds the sdist +
-wheel, runs `twine check`, and uploads to PyPI.
+(OIDC) — no API tokens or stored secrets.
 
-The workflow uses `skip-existing`, so a merge that did **not** bump the version is
-a harmless no-op (the already-published version is skipped, not re-uploaded). A
-new version only goes out when the version number changes.
+Two separate things to keep straight:
+
+- **The publish workflow runs on *every* merge to `main`** (i.e. any `develop` →
+  `main` PR). It builds the sdist + wheel, runs `twine check`, and calls the
+  upload step every time.
+- **A new version is only *released* when you bump `version` in
+  `pyproject.toml`.** The upload uses `skip-existing`, so if the version already
+  exists on PyPI (you merged without changing it), the upload is skipped and
+  nothing else happens — the job still succeeds. If the version is new, that
+  version is uploaded to PyPI **and** the workflow automatically creates the
+  matching `v<version>` git tag and a GitHub Release, with notes pulled from the
+  matching section of `CHANGELOG.md`.
+
+In short: merging the PR is what *runs* the job; bumping the version number is
+what makes an actual release (PyPI + tag + GitHub Release) go out. You don't
+create tags or releases by hand — the workflow does it for you.
 
 **One-time setup** (before the first publish):
 
@@ -208,19 +219,28 @@ new version only goes out when the version number changes.
    (*Settings → Environments → New environment*). Optionally add a required
    reviewer so each publish needs approval.
 3. Protect `main` (*Settings → Branches*) so changes land only via pull request.
+4. Ensure Actions can create releases: *Settings → Actions → General → Workflow
+   permissions* should allow read **and** write (the workflow also requests
+   `contents: write` explicitly for the release job).
 
 **To ship a new version** (work on `develop`, release via PR):
 
-1. Bump `version` in `pyproject.toml` (the single source of truth —
-   `fyc_normalize.__version__` reads it from the installed package metadata).
+1. **Bump `version` in `pyproject.toml`.** This is the one step that makes a new
+   release happen — if you skip it, merging still runs the workflow but publishes
+   nothing new. (`pyproject.toml` is the single source of truth;
+   `fyc_normalize.__version__` reads it from the installed package metadata.)
 2. Move the `[Unreleased]` notes into a new version section in `CHANGELOG.md`.
 3. Open a PR from `develop` to `main`; CI runs the test matrix on it.
-4. Merge the PR. `publish.yml` runs on the resulting push to `main` and uploads
-   the new version to PyPI.
+4. Merge the PR. The push to `main` runs `publish.yml`, which uploads the new
+   version to PyPI and creates the `v<version>` tag + GitHub Release automatically.
+
+Merges that don't touch the version (docs, refactors, etc.) are fine — the
+workflow runs, skips the upload, and skips the release because the tag already
+exists. No manual tagging needed either way.
 
 To dry-run the build without publishing, trigger the workflow manually
 (*Actions → Publish to PyPI → Run workflow*); the `publish` job is skipped on
-manual runs. Tagging releases is optional but a nice habit (`git tag v0.1.0`).
+manual runs.
 
 > **Note:** normalized US TINs (SSNs, ITINs, ...) are sensitive plaintext PII.
 > Treat any table that stores them as sensitive.
